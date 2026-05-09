@@ -38,3 +38,39 @@ The project is being developed as part of the IEEE Computer Society Bangalore Ch
 ```text
 Dataset → Data Preprocessing → Exploratory Data Analysis →
 Model Training → Evaluation → Explainable AI Analysis
+```
+
+---
+
+## Repository Structure
+network-intrusion-detection-xai/
+│
+├── data/
+├── notebooks/
+├── src/
+├── results/
+├── docs/
+├── presentation/
+│
+├── README.md
+├── requirements.txt
+└── .gitignore
+
+---
+
+## Team
+Piyush M. Borkar (Team Lead)
+Varun Gada
+
+---
+
+## Program
+
+IEEE Computer Society Bangalore Chapter
+Student Internship & Mentorship Program 2026
+
+---
+
+## Status
+
+Project currently in development.
