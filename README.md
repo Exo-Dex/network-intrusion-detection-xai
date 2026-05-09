@@ -1,2 +1,40 @@
-# network-intrusion-detection-xai
-Machine learning-based network intrusion detection system using the NSL-KDD dataset with Explainable AI techniques for interpretable cybersecurity analysis.
+# Network Intrusion Detection using Machine Learning with Explainable AI
+
+## Overview
+This project focuses on developing a machine learning-based intrusion detection system using the NSL-KDD dataset. The objective is to classify network traffic as normal or malicious while incorporating Explainable AI (XAI) techniques to improve interpretability and understanding of model predictions.
+
+The project is being developed as part of the IEEE Computer Society Bangalore Chapter Student Internship & Mentorship Program 2026.
+
+---
+
+## Objectives
+- Detect malicious network activity using machine learning
+- Perform data preprocessing and exploratory data analysis
+- Train and evaluate classification models
+- Apply Explainable AI techniques for interpretability
+- Document findings through reports and research-oriented analysis
+
+---
+
+## Dataset
+- **Dataset:** NSL-KDD
+- **Source:** Kaggle
+- **Domain:** Cybersecurity / Network Intrusion Detection
+
+---
+
+## Technologies Used
+- Python
+- Pandas
+- NumPy
+- Scikit-learn
+- Matplotlib
+- Seaborn
+- Jupyter Notebook / Google Colab
+
+---
+
+## Project Workflow
+```text
+Dataset → Data Preprocessing → Exploratory Data Analysis →
+Model Training → Evaluation → Explainable AI Analysis
