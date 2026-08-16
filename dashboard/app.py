@@ -9,7 +9,7 @@ Run from project root:
     streamlit run dashboard/app.py
 """
 
-import os, sys, pickle, warnings
+import os, pickle, warnings
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -320,8 +320,57 @@ def apply_mpl_theme(fig, ax_list=None):
     return fig
 
 # ─────────────────────────────────────────
-#  Data & Model Loading
+#  Sklearn-Compatible Wrappers for Keras Models
+#  (so the rest of the dashboard can call .predict() /
+#   .predict_proba() uniformly regardless of model type)
 # ─────────────────────────────────────────
+class MLPWrapper:
+    """Wraps the Keras binary MLP with a sklearn-style interface."""
+    def __init__(self, keras_model):
+        self.model = keras_model
+
+    def predict(self, X):
+        proba = self.model.predict(X, verbose=0).flatten()
+        return (proba > 0.5).astype(int)
+
+    def predict_proba(self, X):
+        p_attack = self.model.predict(X, verbose=0).flatten()
+        p_normal = 1 - p_attack
+        return np.column_stack([p_normal, p_attack])
+
+
+class AutoencoderWrapper:
+    """
+    Wraps the Autoencoder anomaly detector with a sklearn-style interface.
+    Classification is reconstruction-error-vs-threshold based rather than
+    a direct model output, so predict_proba is a derived pseudo-probability
+    (error magnitude relative to threshold, squashed to [0, 1]) rather than
+    a calibrated probability. This keeps the confidence-bar UI meaningful
+    without claiming statistical calibration it doesn't have.
+    """
+    def __init__(self, keras_model, threshold):
+        self.model = keras_model
+        self.threshold = threshold
+
+    def _errors(self, X):
+        recon = self.model.predict(X, verbose=0)
+        return np.mean(np.power(X - recon, 2), axis=1)
+
+    def predict(self, X):
+        errors = self._errors(X)
+        return (errors > self.threshold).astype(int)
+
+    def predict_proba(self, X):
+        errors = self._errors(X)
+        # Squash error/threshold ratio to (0,1) via a logistic-style curve
+        # centered at the threshold, so error == threshold -> 0.5
+        ratio = errors / (self.threshold + 1e-12)
+        p_attack = 1 / (1 + np.exp(-4 * (ratio - 1)))
+        p_normal = 1 - p_attack
+        return np.column_stack([p_normal, p_attack])
+
+
+
 @st.cache_data
 def load_data():
     train = pd.read_csv(os.path.join(DATA_DIR, 'train_cleaned.csv'))
@@ -343,9 +392,34 @@ def load_ml_models():
     for n, l in zip(names, labels):
         try:
             with open(os.path.join(MODEL_DIR, f'{n}_binary.pkl'), 'rb') as f:
-                models[n] = {'model': pickle.load(f), 'label': l}
+                models[n] = {'model': pickle.load(f), 'label': l, 'kind': 'sklearn'}
         except Exception:
             pass
+
+    # MLP (Keras) — deferred import so a missing TF install doesn't break the
+    # 4 sklearn models above; MLP/Autoencoder just won't appear if TF is absent.
+    try:
+        import tensorflow as tf
+        mlp_path = os.path.join(MODEL_DIR, 'mlp_binary.keras')
+        if os.path.exists(mlp_path):
+            keras_mlp = tf.keras.models.load_model(mlp_path)
+            models['mlp'] = {'model': MLPWrapper(keras_mlp), 'label': 'MLP (Deep Neural Net)', 'kind': 'keras'}
+    except Exception:
+        pass
+
+    # Autoencoder (Keras) — needs its saved reconstruction-error threshold too
+    try:
+        import tensorflow as tf
+        ae_path  = os.path.join(MODEL_DIR, 'autoencoder.keras')
+        thr_path = os.path.join(MODEL_DIR, 'ae_threshold.pkl')
+        if os.path.exists(ae_path) and os.path.exists(thr_path):
+            keras_ae = tf.keras.models.load_model(ae_path)
+            with open(thr_path, 'rb') as f:
+                threshold = pickle.load(f)
+            models['autoencoder'] = {'model': AutoencoderWrapper(keras_ae, threshold), 'label': 'Autoencoder (Anomaly)', 'kind': 'keras'}
+    except Exception:
+        pass
+
     return models
 
 @st.cache_data
@@ -363,7 +437,10 @@ def compute_metrics(_models, _X_test, _y_test):
     return pd.DataFrame(rows).set_index('Model')
 
 @st.cache_resource
-def get_explainer(_model):
+def get_explainer(_model, model_key):
+    # model_key is a plain string, so Streamlit hashes it and correctly
+    # differentiates the cache entry per model. _model itself is ignored
+    # for hashing (leading underscore), which is why model_key is required.
     return shap.TreeExplainer(_model)
 
 # ─────────────────────────────────────────
@@ -372,7 +449,6 @@ def get_explainer(_model):
 try:
     df_train, df_test = load_data()
     scaler, le, FEATURE_COLS = load_artifacts()
-    DROP_COLS    = ['label', 'attack_category', 'binary_label']
     X_train_raw  = df_train[FEATURE_COLS].values
     X_test_raw   = df_test[FEATURE_COLS].values
     y_test_bin   = df_test['binary_label'].values
@@ -417,7 +493,7 @@ with st.sidebar:
         "📊  Model Performance",
         "🧠  XAI Deep Dive",
         "🏠  Overview",
-    ], label_visibility="collapsed")
+    ], label_visibility="collapsed", key="nav_page")
 
     st.markdown("---")
 
@@ -497,6 +573,14 @@ if page == "🔍  Predict & Explain":
 
     st.markdown("---")
 
+    if model_key == 'autoencoder':
+        st.info(
+            "The Autoencoder is an unsupervised anomaly detector, not a classifier. "
+            "Its \"confidence\" below is derived from reconstruction error relative to "
+            "the trained threshold, not a calibrated class probability like the other models.",
+            icon="ℹ️"
+        )
+
     idx        = st.session_state.instance_idx
     model_obj  = ml_models[model_key]['model']
     instance   = X_test[idx].reshape(1, -1)
@@ -572,7 +656,7 @@ if page == "🔍  Predict & Explain":
         st.markdown('<div class="label-sm" style="margin-bottom:12px;">💡 SHAP Explanation — Why this prediction?</div>', unsafe_allow_html=True)
 
         with st.spinner("Computing SHAP values..."):
-            explainer = get_explainer(model_obj)
+            explainer = get_explainer(model_obj, model_key)
             sv        = explainer.shap_values(instance)
 
             if isinstance(sv, list):
@@ -581,9 +665,6 @@ if page == "🔍  Predict & Explain":
             else:
                 sv_single = sv[0, :, 1] if sv.ndim == 3 else sv[0]
                 base_val  = explainer.expected_value
-
-            # Fix: safely extract scalar from base_val
-            base_val = float(np.array(base_val).flatten()[0])
 
         shap_exp = shap.Explanation(
             values        = sv_single,
@@ -783,7 +864,7 @@ elif page == "🧠  XAI Deep Dive":
             np.random.seed(42)
             sidx   = np.random.choice(len(X_test), sample_n, replace=False)
             X_s    = X_test[sidx]
-            g_exp  = get_explainer(ml_models[g_model_key]['model'])
+            g_exp  = get_explainer(ml_models[g_model_key]['model'], g_model_key)
             sv_g   = g_exp.shap_values(X_s)
             if isinstance(sv_g, list): sv_g = sv_g[1]
             if sv_g.ndim == 3:         sv_g = sv_g[:, :, 1]
@@ -824,7 +905,8 @@ elif page == "🧠  XAI Deep Dive":
             'Max |SHAP|'   : np.abs(sv_g).max(axis=0),
             'Std |SHAP|'   : np.abs(sv_g).std(axis=0),
         }).sort_values('Mean |SHAP|', ascending=False).head(20).reset_index(drop=True)
-        rank_df.index += 1  # start rank from 1
+        rank_df.index += 1
+        rank_df.index.name = 'Rank'
         rank_df[['Mean |SHAP|','Max |SHAP|','Std |SHAP|']] = rank_df[['Mean |SHAP|','Max |SHAP|','Std |SHAP|']].round(4)
         st.dataframe(rank_df, use_container_width=True)
 
@@ -849,7 +931,7 @@ elif page == "🧠  XAI Deep Dive":
         m4.metric("Verdict",     "✅ Correct" if l_pred==l_true else "❌ Wrong")
 
         with st.spinner("Computing local SHAP..."):
-            l_exp  = get_explainer(l_model)
+            l_exp  = get_explainer(l_model, l_model_key)
             sv_l   = l_exp.shap_values(l_instance)
             if isinstance(sv_l, list):
                 sv_l_s  = sv_l[1][0]

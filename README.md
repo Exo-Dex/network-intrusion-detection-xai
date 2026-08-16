@@ -34,6 +34,26 @@ The project is being developed as part of the IEEE Computer Society Bangalore Ch
 
 ---
 
+## Streamlit Demo
+
+The dashboard entrypoint is:
+
+```bash
+streamlit run dashboard/app.py
+```
+
+Before launching the app, make sure these generated artifacts are present:
+
+- `data/processed/train_cleaned.csv`
+- `data/processed/test_cleaned.csv`
+- `results/models/scaler.pkl`
+- `results/models/feature_cols.pkl`
+- `results/models/*_binary.pkl`
+
+The app loads existing artifacts only; it does not retrain models at startup.
+
+---
+
 ## Project Workflow
 
 ```text

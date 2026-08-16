@@ -1,0 +1,103 @@
+<svg width="1100" height="520" viewBox="0 0 1100 520" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Proposed NIDS-XAI Architecture</title>
+  <desc id="desc">IEEE-style workflow diagram showing NSL-KDD preprocessing, model training, prediction, explainability, and dashboard interpretation.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#333333"/>
+    </marker>
+    <style>
+      .box { fill: #ffffff; stroke: #333333; stroke-width: 1.4; }
+      .box-soft { fill: #f4f7fb; stroke: #333333; stroke-width: 1.4; }
+      .box-xai { fill: #fff7e6; stroke: #333333; stroke-width: 1.4; }
+      .box-out { fill: #eef8f1; stroke: #333333; stroke-width: 1.4; }
+      .title { font-family: "Times New Roman", Times, serif; font-size: 18px; font-weight: 700; fill: #111111; }
+      .label { font-family: "Times New Roman", Times, serif; font-size: 15px; font-weight: 700; fill: #111111; }
+      .small { font-family: "Times New Roman", Times, serif; font-size: 13px; fill: #222222; }
+      .tiny { font-family: "Times New Roman", Times, serif; font-size: 12px; fill: #222222; }
+      .arrow { stroke: #333333; stroke-width: 1.5; fill: none; marker-end: url(#arrow); }
+      .group-label { font-family: "Times New Roman", Times, serif; font-size: 14px; font-weight: 700; fill: #333333; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1100" height="520" fill="#ffffff"/>
+  <text x="550" y="34" text-anchor="middle" class="title">Proposed NIDS-XAI Architecture</text>
+
+  <!-- Input and preprocessing -->
+  <rect x="40" y="110" width="150" height="90" rx="4" class="box"/>
+  <text x="115" y="140" text-anchor="middle" class="label">NSL-KDD</text>
+  <text x="115" y="162" text-anchor="middle" class="small">Network traffic</text>
+  <text x="115" y="181" text-anchor="middle" class="small">records</text>
+
+  <line x1="190" y1="155" x2="240" y2="155" class="arrow"/>
+
+  <rect x="240" y="92" width="180" height="126" rx="4" class="box-soft"/>
+  <text x="330" y="122" text-anchor="middle" class="label">Preprocessing</text>
+  <text x="330" y="146" text-anchor="middle" class="small">Clean data</text>
+  <text x="330" y="166" text-anchor="middle" class="small">Encode categories</text>
+  <text x="330" y="186" text-anchor="middle" class="small">Scale features</text>
+  <text x="330" y="205" text-anchor="middle" class="tiny">Binary and multiclass labels</text>
+
+  <line x1="420" y1="155" x2="470" y2="155" class="arrow"/>
+
+  <rect x="470" y="110" width="160" height="90" rx="4" class="box"/>
+  <text x="550" y="140" text-anchor="middle" class="label">Feature Matrix</text>
+  <text x="550" y="162" text-anchor="middle" class="small">Processed train</text>
+  <text x="550" y="181" text-anchor="middle" class="small">and test sets</text>
+
+  <!-- Model layer -->
+  <line x1="630" y1="155" x2="690" y2="155" class="arrow"/>
+
+  <rect x="690" y="70" width="170" height="130" rx="4" class="box-soft"/>
+  <text x="775" y="100" text-anchor="middle" class="label">ML Models</text>
+  <text x="775" y="125" text-anchor="middle" class="small">Random Forest</text>
+  <text x="775" y="145" text-anchor="middle" class="small">XGBoost</text>
+  <text x="775" y="165" text-anchor="middle" class="small">Decision Tree</text>
+  <text x="775" y="185" text-anchor="middle" class="small">Logistic Regression</text>
+
+  <rect x="690" y="245" width="170" height="110" rx="4" class="box-soft"/>
+  <text x="775" y="275" text-anchor="middle" class="label">DL Models</text>
+  <text x="775" y="302" text-anchor="middle" class="small">MLP classifier</text>
+  <text x="775" y="323" text-anchor="middle" class="small">Autoencoder</text>
+  <text x="775" y="342" text-anchor="middle" class="tiny">Anomaly detection</text>
+
+  <path d="M 630 155 C 650 155, 660 135, 690 135" class="arrow"/>
+  <path d="M 630 155 C 660 165, 660 300, 690 300" class="arrow"/>
+
+  <!-- Prediction -->
+  <path d="M 860 135 C 890 135, 895 190, 925 190" class="arrow"/>
+  <path d="M 860 300 C 890 300, 895 220, 925 220" class="arrow"/>
+
+  <rect x="925" y="160" width="140" height="90" rx="4" class="box"/>
+  <text x="995" y="190" text-anchor="middle" class="label">Prediction</text>
+  <text x="995" y="214" text-anchor="middle" class="small">Normal or Attack</text>
+  <text x="995" y="233" text-anchor="middle" class="tiny">Attack category</text>
+
+  <!-- XAI layer -->
+  <line x1="995" y1="250" x2="995" y2="300" class="arrow"/>
+
+  <rect x="880" y="300" width="230" height="115" rx="4" class="box-xai"/>
+  <text x="995" y="330" text-anchor="middle" class="label">Explainability Layer</text>
+  <text x="995" y="355" text-anchor="middle" class="small">SHAP global and local</text>
+  <text x="995" y="376" text-anchor="middle" class="small">LIME instance explanation</text>
+  <text x="995" y="397" text-anchor="middle" class="small">Feature importance</text>
+
+  <!-- Output -->
+  <path d="M 880 358 C 760 420, 590 430, 435 430" class="arrow"/>
+  <rect x="245" y="385" width="190" height="90" rx="4" class="box-out"/>
+  <text x="340" y="415" text-anchor="middle" class="label">Dashboard</text>
+  <text x="340" y="439" text-anchor="middle" class="small">Prediction, metrics,</text>
+  <text x="340" y="458" text-anchor="middle" class="small">plots and explanations</text>
+
+  <!-- Evaluation branch -->
+  <path d="M 995 160 C 995 82, 910 50, 805 50" class="arrow"/>
+  <rect x="595" y="28" width="210" height="44" rx="4" class="box"/>
+  <text x="700" y="55" text-anchor="middle" class="small">Evaluation: Accuracy, Precision, Recall, F1</text>
+
+  <!-- Layer annotations -->
+  <text x="330" y="245" text-anchor="middle" class="group-label">Data layer</text>
+  <line x1="245" y1="253" x2="415" y2="253" stroke="#888888" stroke-width="1"/>
+  <text x="775" y="390" text-anchor="middle" class="group-label">Detection layer</text>
+  <line x1="690" y1="398" x2="860" y2="398" stroke="#888888" stroke-width="1"/>
+  <text x="995" y="450" text-anchor="middle" class="group-label">Interpretability layer</text>
+  <line x1="890" y1="458" x2="1100" y2="458" stroke="#888888" stroke-width="1"/>
+</svg>
