@@ -1,169 +1,135 @@
 """
-train_model.py
---------------
-Model definitions and training utilities for the NIDS-XAI project.
-
-Models:
-  ML  — Random Forest, XGBoost, Decision Tree, Logistic Regression
-  DL  — MLP (Keras), Autoencoder (Keras, anomaly detection)
+Model definitions, architectures, and training procedures for supervised ML,
+deep learning (MLP), and unsupervised anomaly detection (Autoencoder).
 """
 
+import os
+import pickle
 import numpy as np
-from sklearn.ensemble     import RandomForestClassifier
-from sklearn.tree         import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import LogisticRegression
-from xgboost              import XGBClassifier
+import xgboost as xgb
+
+try:
+    import tensorflow as tf
+    from tensorflow.keras.models import Model, Sequential
+    from tensorflow.keras.layers import Dense, Dropout, BatchNormalization, Input
+    from tensorflow.keras.callbacks import EarlyStopping
+except ImportError:
+    tf = None
 
 
-# ─────────────────────────────────────────
-#  ML Models
-# ─────────────────────────────────────────
-
-def get_ml_model(name: str):
-    """Return a scikit-learn / XGBoost model by name."""
-    models = {
-        "random_forest": RandomForestClassifier(
-            n_estimators=100, random_state=42, n_jobs=-1
-        ),
-        "xgboost": XGBClassifier(
-            n_estimators=100, random_state=42,
-            eval_metric="logloss", use_label_encoder=False, n_jobs=-1
-        ),
-        "decision_tree": DecisionTreeClassifier(
-            max_depth=20, random_state=42
-        ),
-        "logistic_regression": LogisticRegression(
-            max_iter=1000, random_state=42, n_jobs=-1
-        ),
-    }
-    if name not in models:
-        raise ValueError(f"Unknown model '{name}'. Choose from: {list(models.keys())}")
-    return models[name]
+def get_ml_model(name, is_multiclass=False, random_state=42):
+    """
+    Factory function returning initialized Scikit-learn / XGBoost classifiers.
+    Handles scikit-learn parameter deprecations gracefully.
+    """
+    name = name.lower()
+    if name in ['random_forest', 'rf']:
+        return RandomForestClassifier(n_estimators=100, random_state=random_state, n_jobs=-1)
+    elif name in ['xgboost', 'xgb']:
+        if is_multiclass:
+            return xgb.XGBClassifier(n_estimators=100, eval_metric='mlogloss', random_state=random_state, n_jobs=-1)
+        else:
+            return xgb.XGBClassifier(n_estimators=100, eval_metric='logloss', random_state=random_state, n_jobs=-1)
+    elif name in ['decision_tree', 'dt']:
+        return DecisionTreeClassifier(max_depth=20, random_state=random_state)
+    elif name in ['logistic_regression', 'lr']:
+        # Note: newer scikit-learn versions deprecate multi_class; default handles binary and multiclass
+        return LogisticRegression(max_iter=1000, random_state=random_state, n_jobs=-1)
+    else:
+        raise ValueError(f"Unsupported model name: {name}")
 
 
 def train_ml(model, X_train, y_train):
-    """Fit an ML model and return it."""
+    """Fit a classical machine learning model."""
     model.fit(X_train, y_train)
     return model
 
 
-# ─────────────────────────────────────────
-#  DL Models  (Keras / TensorFlow)
-# ─────────────────────────────────────────
-
-def build_mlp(input_dim: int, num_classes: int = 2):
+def build_mlp(input_dim, num_classes=2):
     """
-    Build a Multi-Layer Perceptron for classification.
-
-    Args:
-        input_dim  : number of input features
-        num_classes: 2 for binary, >2 for multiclass
-
-    Returns:
-        Compiled Keras model
+    Construct a 4-layer Multi-Layer Perceptron with BatchNormalization and Dropout.
+    Binary task uses sigmoid; multiclass task uses softmax.
     """
-    import tensorflow as tf
-    from tensorflow.keras import layers, models
-
-    activation = "sigmoid" if num_classes == 2 else "softmax"
-    loss       = "binary_crossentropy" if num_classes == 2 else "sparse_categorical_crossentropy"
-    output_dim = 1 if num_classes == 2 else num_classes
-
-    model = models.Sequential([
-        layers.Input(shape=(input_dim,)),
-        layers.Dense(256, activation="relu"),
-        layers.BatchNormalization(),
-        layers.Dropout(0.3),
-        layers.Dense(128, activation="relu"),
-        layers.BatchNormalization(),
-        layers.Dropout(0.2),
-        layers.Dense(64, activation="relu"),
-        layers.Dense(output_dim, activation=activation),
-    ], name="MLP")
-
-    model.compile(
-        optimizer="adam",
-        loss=loss,
-        metrics=["accuracy"]
-    )
+    if tf is None:
+        raise ImportError("TensorFlow is required to build deep learning models.")
+    
+    model = Sequential([
+        Input(shape=(input_dim,)),
+        Dense(256, activation='relu'),
+        BatchNormalization(),
+        Dropout(0.3),
+        Dense(128, activation='relu'),
+        BatchNormalization(),
+        Dropout(0.3),
+        Dense(64, activation='relu'),
+        BatchNormalization(),
+        Dropout(0.2),
+        Dense(1 if num_classes == 2 else num_classes, 
+              activation='sigmoid' if num_classes == 2 else 'softmax')
+    ])
+    
+    loss = 'binary_crossentropy' if num_classes == 2 else 'sparse_categorical_crossentropy'
+    model.compile(optimizer='adam', loss=loss, metrics=['accuracy'])
     return model
 
 
-def build_autoencoder(input_dim: int):
+def build_autoencoder(input_dim):
     """
-    Build an Autoencoder for anomaly detection.
-    Trained on NORMAL traffic only.
-    High reconstruction error → likely an attack.
-
-    Args:
-        input_dim: number of input features
-
-    Returns:
-        autoencoder (full model), encoder (encoder half)
+    Construct a Deep Symmetric Autoencoder for unsupervised reconstruction-based
+    anomaly detection (128 -> 64 -> Bottleneck(32) -> 64 -> 128 -> input_dim).
     """
-    import tensorflow as tf
-    from tensorflow.keras import layers, models
-
+    if tf is None:
+        raise ImportError("TensorFlow is required to build deep learning models.")
+        
+    inp = Input(shape=(input_dim,))
     # Encoder
-    inputs  = layers.Input(shape=(input_dim,))
-    encoded = layers.Dense(128, activation="relu")(inputs)
-    encoded = layers.Dense(64,  activation="relu")(encoded)
-    encoded = layers.Dense(32,  activation="relu")(encoded)
-
+    x = Dense(128, activation='relu')(inp)
+    x = Dense(64, activation='relu')(x)
+    bottleneck = Dense(32, activation='relu', name='bottleneck')(x)
     # Decoder
-    decoded = layers.Dense(64,  activation="relu")(encoded)
-    decoded = layers.Dense(128, activation="relu")(decoded)
-    decoded = layers.Dense(input_dim, activation="linear")(decoded)
-
-    autoencoder = models.Model(inputs, decoded, name="Autoencoder")
-    encoder     = models.Model(inputs, encoded, name="Encoder")
-
-    autoencoder.compile(optimizer="adam", loss="mse")
-    return autoencoder, encoder
+    x = Dense(64, activation='relu')(bottleneck)
+    x = Dense(128, activation='relu')(x)
+    out = Dense(input_dim, activation='linear')(x)
+    
+    autoencoder = Model(inputs=inp, outputs=out, name='nids_autoencoder')
+    autoencoder.compile(optimizer='adam', loss='mse')
+    return autoencoder
 
 
-def train_dl(model, X_train, y_train=None,
-             epochs=30, batch_size=256, validation_split=0.1,
-             verbose=1):
-    """
-    Train a Keras model.
-    For autoencoder: pass X_train as both input and target (y_train=None).
-    """
-    import tensorflow as tf
-
-    y = X_train if y_train is None else y_train   # autoencoder reconstructs input
+def train_dl(model, X_train, y_train=None, epochs=30, batch_size=128, val_split=0.1, patience=5):
+    """Train a deep neural network with EarlyStopping on validation loss."""
+    callbacks = [EarlyStopping(monitor='val_loss', patience=patience, restore_best_weights=True, verbose=1)]
+    targets = X_train if y_train is None else y_train
     history = model.fit(
-        X_train, y,
+        X_train, targets,
         epochs=epochs,
         batch_size=batch_size,
-        validation_split=validation_split,
-        verbose=verbose,
-        callbacks=[
-            tf.keras.callbacks.EarlyStopping(
-                monitor="val_loss", patience=5, restore_best_weights=True
-            )
-        ]
+        validation_split=val_split,
+        callbacks=callbacks,
+        verbose=1
     )
-    return history
+    return model, history
 
 
-def get_autoencoder_threshold(autoencoder, X_normal, percentile=95):
-    """
-    Compute reconstruction-error threshold from normal training samples.
-    Samples above this threshold are flagged as anomalies (attacks).
-    """
-    recon       = autoencoder.predict(X_normal, verbose=0)
-    errors      = np.mean(np.power(X_normal - recon, 2), axis=1)
-    threshold   = np.percentile(errors, percentile)
-    return threshold, errors
+def compute_reconstruction_error(model, X):
+    """Compute per-sample Mean Squared Error between input and reconstructed output."""
+    preds = model.predict(X, verbose=0)
+    mse = np.mean(np.square(X - preds), axis=1)
+    return mse
 
 
-def autoencoder_predict(autoencoder, X, threshold):
-    """
-    Predict binary labels using reconstruction error.
-    0 = Normal, 1 = Attack (anomaly)
-    """
-    recon  = autoencoder.predict(X, verbose=0)
-    errors = np.mean(np.power(X - recon, 2), axis=1)
-    preds  = (errors > threshold).astype(int)
+def calibrate_autoencoder_threshold(model, X_normal_train, percentile=95.0):
+    """Set anomaly detection threshold at the given percentile of normal reconstruction errors."""
+    normal_errors = compute_reconstruction_error(model, X_normal_train)
+    threshold = np.percentile(normal_errors, percentile)
+    return threshold
+
+
+def predict_autoencoder(model, X, threshold):
+    """Flag samples with reconstruction error > threshold as attacks (1), else normal (0)."""
+    errors = compute_reconstruction_error(model, X)
+    preds = (errors > threshold).astype(int)
     return preds, errors

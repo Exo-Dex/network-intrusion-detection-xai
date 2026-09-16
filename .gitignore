@@ -1,28 +1,63 @@
 # Python
 __pycache__/
 *.py[cod]
-*.pyo
-
-# Jupyter Notebook
-.ipynb_checkpoints/
-
-# Virtual Environment
+*.class
+*.so
+.Python
+env/
 venv/
-.env/
+.venv/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Dataset files
-*.csv
-*.zip
-*.xlsx
-*.txt
-*.arff
+# Data and large artifacts
+data/processed/*.csv
+*.h5
+*.keras
+*.pkl
+*.parquet
 
-# OS files
+# Jupyter
+.ipynb_checkpoints
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS
 .DS_Store
 Thumbs.db
 
-# VS Code
-.vscode/
+# Raw and processed datasets
+data/
+*.csv
+*.pcap
 
-# Logs
-*.log
+# Pretrained model binaries and serialized weights
+models/
+*.keras
+*.h5
+*.pkl
+
+# Compressed archives
+*.tar
+*.tar.gz
+*.zip
+
+# Python & Environment artifacts
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.env

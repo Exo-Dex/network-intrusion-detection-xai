@@ -1,0 +1,192 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[letterpaper,margin=0.625in,top=0.75in,bottom=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{microtype}
+\usepackage{url}
+\usepackage{cite}
+
+\begin{document}
+
+\title{\textbf{\LARGE Explainable Network Intrusion Detection: A Comparative Study of Machine Learning and Deep Learning Models on NSL-KDD Using SHAP and LIME}}
+
+\author{
+  \textbf{Piyush M. Borkar}$^1$, \textbf{Varun Gada}$^1$, \textbf{Boppuru Rudra Prathap}$^2$\\[0.5ex]
+  \small $^1$Department of Artificial Intelligence \& Data Science / Department of Computer Engineering,\\
+  \small Marathwada Mitra Mandal's Institute of Technology (MMIT), Savitribai Phule Pune University, Pune, India\\
+  \small \texttt{piyushborkar.official@gmail.com}, \texttt{varungada2004@gmail.com}\\[0.5ex]
+  \small $^2$School of Engineering \& Technology, M. S. Ramaiah University of Applied Sciences (MSRU), Bengaluru, India\\
+  \small \texttt{brprathap@msruas.ac.in} / Mentor ID: M26\\[0.5ex]
+  \small \textit{IEEE Computer Society Bangalore Chapter --- Student Internship and Mentorship Program (SIMP 2026)}
+}
+\date{}
+\maketitle
+
+\begin{abstract}
+Network Intrusion Detection Systems (NIDS) utilizing Machine Learning (ML) and Deep Learning (DL) achieve high detection capability but predominantly operate as opaque black-box models. In operational Security Operations Centers (SOC), this opacity obscures the rationale behind automated alerts, hinders rapid triage of false alarms, and impedes analyst validation of critical exploits. This paper presents an end-to-end explainable NIDS framework evaluated on the benchmark NSL-KDD dataset. The proposed architecture evaluates four supervised machine learning classifiers (Random Forest, XGBoost, Decision Tree, Logistic Regression) and two neural architectures: a four-layer Multi-Layer Perceptron (MLP) for classification and a deep Autoencoder for unsupervised reconstruction-based anomaly detection. Nominal traffic features are mapped into a unified 122-dimensional one-hot feature space with training-partition standard scaling. Model predictions are interpreted through a dual-XAI layer: SHAP (SHapley Additive exPlanations) for global beeswarm distributions and local waterfall decompositions, coupled with LIME (Local Interpretable Model-Agnostic Explanations) for rule-based surrogate verification. Evaluated on the full held-out KDDTest+ dataset (22,544 records), the MLP achieved the highest binary F1-score of 79.08\% (79.28\% accuracy), while XGBoost delivered the strongest 5-class multiclass performance with a weighted F1-score of 74.44\%. All supervised classifiers exhibited high precision (91.2\%--96.8\%) alongside lower recall (60.7\%--68.8\%), an empirical asymmetry traced to unobserved attack subtypes in KDDTest+ absent from KDDTrain+. Global SHAP rankings and local LIME surrogates independently converged on a consistent set of influential flow features---primarily same\_srv\_rate, dst\_host\_same\_srv\_rate, and src\_bytes---demonstrating that predictive accuracy and operational transparency are mutually achievable design goals in intrusion detection.
+\end{abstract}
+
+\textbf{\textit{Keywords}}---Network Intrusion Detection System, Explainable AI, SHAP, LIME, NSL-KDD, Autoencoder, Multi-Layer Perceptron, XGBoost, Random Forest, Cybersecurity.
+
+\section{Introduction}
+The exponential expansion of digital communication, enterprise cloud environments, and distributed networked systems has elevated cybersecurity to a critical operational priority. Cyber threats continue to evolve in scale, complexity, and stealth, with threat actors frequently deploying multi-stage intrusion campaigns, evasive malware variants, and zero-day exploits. Traditional network security mechanisms rely primarily on perimeter firewalls, rule-based heuristics, and signature-matching Intrusion Detection Systems (IDS), such as Snort and Suricata. While signature-based detection systems maintain high throughput and near-zero false positive rates on documented exploit patterns, they are structurally incapable of recognizing previously unobserved attack vectors or variations of polymorphic attacks.
+
+Machine learning (ML) and deep learning (DL) methodologies provide a data-driven alternative by inferring statistical decision boundaries directly from packet traces and session connection records. Algorithms ranging from tree ensembles (Random Forest, XGBoost) to deep feedforward networks (Multi-Layer Perceptrons) adapt autonomously to multi-dimensional traffic representations without requiring handcrafted signatures. Simultaneously, unsupervised reconstruction approaches, such as deep Autoencoders, offer a framework for anomaly detection by learning the baseline distribution of legitimate network sessions, flagging statistical deviations as potential zero-day exploits.
+
+Despite strong quantitative benchmarks, a significant barrier restricts the autonomous deployment of ML and DL architectures in production Security Operations Centers (SOC): the black-box dilemma. High-performing neural networks and complex ensemble trees function as opaque mathematical transformations. When a network session is classified as malicious, human analysts receive no operational context detailing which specific protocol indicators, flag states, or host connection frequencies triggered the alert. This absence of interpretability introduces severe operational vulnerabilities: 1) Analyst Verification Latency: Human operators cannot readily determine whether an alert stems from a genuine attack or benign statistical noise, causing triage backlogs and delayed incident mitigation. 2) False Alarm Fatigue: Inability to diagnose why benign sessions trigger alarms prevents fine-grained tuning of classification thresholds. 3) Compliance and Governance: Security standards and data privacy mandates increasingly require explainable AI decisions in security-critical systems.
+
+To bridge this operational trust gap, recent cybersecurity research has turned toward Explainable Artificial Intelligence (XAI). Frameworks grounded in cooperative game theory, such as SHAP, and local surrogate modeling, such as LIME, offer mechanisms to interpret automated predictions. However, much of the existing literature evaluates XAI either on single models in isolation, reports cross-validation accuracy on training subsets that overstate real-world generalization, or omits comparative cross-method explanation validation.
+
+This paper addresses these limitations by developing an end-to-end, explainable network intrusion detection framework evaluated on the benchmark NSL-KDD dataset.
+
+\section{Literature Survey}
+\subsection{Evolution of Intrusion Detection Benchmarks}
+Tavallaee et al. conducted a foundational evaluation of KDD Cup 1999, identifying that 78\% of training records and 75\% of test records were redundant duplicates, causing learning algorithms to overfit. To rectify this, they established the NSL-KDD benchmark.
+
+\begin{table*}[t]
+\caption{Structured Literature Survey of ML/DL and XAI Approaches in Network Intrusion Detection}
+\label{tab:lit_survey}
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{p{2.5cm}p{3.2cm}p{2.2cm}p{3.5cm}p{5.8cm}}
+\toprule
+\textbf{Reference} & \textbf{Methodology} & \textbf{Dataset} & \textbf{Reported Performance} & \textbf{Observation / Identified Research Gap} \\
+\midrule
+Tavallaee et al. (IEEE CISDA) & Statistical filtering, duplicate removal, difficulty-based sampling & KDD Cup 1999 & Purged 78\% train and 75\% test duplicate records & Constructed the foundational NSL-KDD benchmark; established dataset baseline without proposing ML architectures. \\
+\addlinespace
+Negandhi et al. (Springer) & Random Forest + Gini impurity feature ranking & NSL-KDD & High classification speed; reduced feature dimensionality & Evaluated a single classical classifier; lacked deep learning comparative baselines and post-hoc interpretability. \\
+\addlinespace
+Sow \& Adda (Elsevier MLA) & RF, XGBoost, DNN + SMOTE + Optuna tuning & NSL-KDD & 99.80\% accuracy under 10-fold cross-validation & High scores obtained solely on training cross-validation; did not evaluate on KDDTest+ zero-day attacks and omitted XAI. \\
+\addlinespace
+Song et al. (MDPI / Sensors) & Deep Autoencoder reconstruction anomaly detection & NSL-KDD & Effective thresholding on benign traffic baseline & Unsupervised focus; lacked direct integration with supervised multi-class classifiers and feature attribution. \\
+\addlinespace
+Gaspar et al. (IEEE Access) & Multi-Layer Perceptron + SHAP + LIME & IoT Traffic & Verified explanation stability under perturbation & Restricted solely to neural architectures in IoT contexts; did not compare ensemble tree models or multi-class tasks. \\
+\addlinespace
+Arreche et al. (IEEE Access) & E-XAI Framework: multi-model attribution benchmark & NSL-KDD \& CICIDS2017 & Quantitative cross-explanation consistency & Benchmarked XAI methods; did not integrate unsupervised anomaly reconstruction models into the operational pipeline. \\
+\addlinespace
+Wali et al. (Elsevier C\&S) & Random Forest + Post-hoc Feature Attribution & NSL-KDD & Validated alert root-cause tracing for SOC analysts & Evaluated only Random Forest; omitted gradient-boosted trees, deep learning models, and dual-XAI cross-validation. \\
+\bottomrule
+\end{tabular}%
+}
+\end{table*}
+
+\section{Proposed Methodology}
+
+\begin{table}[htbp]
+\caption{Dataset Partitioning and Class Distribution in NSL-KDD}
+\label{tab:class_dist}
+\centering
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Category} & \textbf{KDDTrain+ Count} & \textbf{KDDTest+ Count} & \textbf{Class Type} \\
+\midrule
+Normal & 67,343 (53.46\%) & 9,711 (43.08\%) & Benign (0) \\
+DoS & 45,927 (36.46\%) & 7,458 (33.08\%) & Malicious (1) \\
+Probe & 11,656 (9.25\%) & 2,421 (10.74\%) & Malicious (1) \\
+R2L & 995 (0.79\%) & 2,885 (12.80\%) & Malicious (1) \\
+U2R & 52 (0.04\%) & 67 (0.30\%) & Malicious (1) \\
+\midrule
+\textbf{Total Instances} & \textbf{125,973} & \textbf{22,544} & -- \\
+\textbf{Feature Dimension} & \textbf{122} & \textbf{122} & Transformed \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Detection Models and Anomaly Engine}
+The detection layer evaluates six distinct algorithmic architectures:
+\begin{itemize}
+    \item \textbf{Random Forest (RF):} 100 bagging trees with Gini split criteria.
+    \item \textbf{XGBoost (XGB):} 100 boosted trees with log-loss objective ($\eta = 0.1$).
+    \item \textbf{Decision Tree (DT):} Single CART tree constrained to depth 20.
+    \item \textbf{Logistic Regression (LR):} L2-regularized linear baseline ($C=1.0$).
+    \item \textbf{Multi-Layer Perceptron (MLP):} A four-layer dense network structured with sequential layers: Input(122) $\rightarrow$ Dense(256) $\rightarrow$ Dense(128) $\rightarrow$ Dense(64) $\rightarrow$ Output, regularized via Batch Normalization and Dropout (0.3, 0.2).
+    \item \textbf{Deep Autoencoder (AE):} A symmetric bottleneck network ($122 \rightarrow 128 \rightarrow 64 \rightarrow \mathbf{32} \rightarrow 64 \rightarrow 128 \rightarrow 122$) trained strictly on benign traffic by minimizing Mean Squared Error (MSE):
+    \begin{equation}
+    \mathcal{L}_{\text{MSE}}(\mathbf{x}, \mathbf{\hat{x}}) = \frac{1}{d} \sum_{j=1}^{d} (x_j - \hat{x}_j)^2
+    \end{equation}
+    Anomalies are flagged when reconstruction error exceeds the 95th-percentile threshold $\theta_{95\%}$.
+\end{itemize}
+
+\section{Experimental Results and Discussion}
+
+\begin{table}[htbp]
+\caption{Binary Classification Performance on KDDTest+}
+\label{tab:binary_results}
+\centering
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model Architecture} & \textbf{Accuracy (\%)} & \textbf{Precision (\%)} & \textbf{Recall (\%)} & \textbf{F1-Score (\%)} \\
+\midrule
+\textbf{Multi-Layer Perceptron (MLP)} & \textbf{79.28} & 92.97 & \textbf{68.81} & \textbf{79.08} \\
+Decision Tree (Depth = 20) & 79.15 & 96.56 & 65.71 & 78.21 \\
+XGBoost (100 Trees) & 78.79 & \textbf{96.81} & 64.87 & 77.69 \\
+Random Forest (100 Trees) & 76.48 & 96.70 & 60.75 & 74.62 \\
+Logistic Regression (L2) & 75.35 & 91.73 & 62.32 & 74.21 \\
+Deep Autoencoder (MSE) & 74.33 & 91.20 & 60.77 & 72.94 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\begin{table}[htbp]
+\caption{Multiclass (5-Class) Classification Results on KDDTest+}
+\label{tab:multiclass_results}
+\centering
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} & \textbf{Accuracy (\%)} & \textbf{W-Precision (\%)} & \textbf{W-Recall (\%)} & \textbf{W-F1 (\%)} \\
+\midrule
+\textbf{XGBoost} & \textbf{77.70} & \textbf{82.70} & \textbf{77.70} & \textbf{74.44} \\
+Decision Tree & 76.85 & 82.09 & 76.85 & 73.31 \\
+Logistic Regression & 76.38 & 74.97 & 76.38 & 72.27 \\
+Multi-Layer Perceptron & 76.12 & 79.41 & 76.12 & 72.25 \\
+Random Forest & 75.12 & 80.89 & 75.12 & 70.47 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\begin{table}[htbp]
+\caption{Comparative Validation Against Established Literature}
+\label{tab:comparison}
+\centering
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{p{2.6cm}cp{3.4cm}}
+\toprule
+\textbf{Study / Venue} & \textbf{Metric} & \textbf{Evaluation Basis} \\
+\midrule
+Sow \& Adda (Elsevier, 2025) & 99.80\% Acc. & 10-Fold cross-validation on train set only; no held-out test. \\
+Negandhi et al. (Springer, 2019) & 98.20\% Acc. & Reduced training subset; no XAI layer. \\
+Gaspar et al. (IEEE Access, 2024) & 82.10\% Acc. & MLP on IoT traffic; single model focus. \\
+Arreche et al. (IEEE Access, 2024) & 78.40\% Acc. & Full KDDTest+ evaluation with SHAP. \\
+Wali et al. (Elsevier, 2025) & 77.10\% Acc. & Random Forest on KDDTest+ with XAI. \\
+\textbf{This Work} & \textbf{79.28\% Acc. /} & \textbf{Full KDDTest+, 6 models, dual SHAP/LIME, Autoencoder.} \\
+ & \textbf{79.08\% F1} & \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\section{Conclusion}
+This paper presented an explainable, multi-model Network Intrusion Detection System evaluated on the benchmark NSL-KDD dataset. By integrating SHAP and LIME, the system demonstrates that high detection precision ($>96\%$) and local operational interpretability are mutually achievable.
+
+\section*{Acknowledgment}
+This research was conducted under the IEEE Computer Society Bangalore Chapter Student Internship and Mentorship Program (SIMP 2026). The authors thank the program mentors, coordinators, and faculty advisors for their technical guidance.
+
+\begin{thebibliography}{00}
+\bibitem{tavallaee2009} M. Tavallaee, E. Bagheri, W. Lu, and A. A. Ghorbani, ``A detailed analysis of the KDD CUP 99 data set,'' in \textit{Proc. IEEE CISDA}, 2009, pp. 1--6.
+\bibitem{negandhi2019} P. Negandhi, R. Trivedi, and R. Mangrulkar, ``Intrusion detection system using random forest on NSL-KDD dataset,'' in \textit{Emerging Research in Computing, Information, Communication and Applications}, Springer, 2019, pp. 419--431.
+\bibitem{sow2025} A. Sow and M. Adda, ``Evaluating explainable artificial intelligence techniques for network intrusion detection,'' \textit{Mach. Learn. Appl.}, vol. 16, p. 100543, 2025.
+\bibitem{song2021} Y. Song, S. Hyun, and Y.-G. Cheong, ``Analysis of autoencoders for network intrusion detection,'' \textit{Sensors}, vol. 21, no. 13, p. 4294, 2021.
+\bibitem{gaspar2024} G. Gaspar, F. M. Dahunsi, and A. E. Ibhaze, ``Explainable AI framework for intrusion detection in IoT networks,'' \textit{IEEE Access}, vol. 12, pp. 31245--31258, 2024.
+\bibitem{arreche2024} O. Arreche, T. Guntur, and M. Abdallah, ``XAI-IDS: Toward proposing an explainable artificial intelligence framework for enhancing network intrusion detection systems,'' \textit{Appl. Sci.}, vol. 14, no. 10, p. 4170, 2024.
+\bibitem{wali2025} S. Wali, I. Khan, and M. Z. A. Bhuiyan, ``Explainable machine learning for cybersecurity threat intelligence in industry 5.0,'' \textit{Comput. Secur.}, vol. 138, p. 103681, 2025.
+\end{thebibliography}
+
+\end{document}
