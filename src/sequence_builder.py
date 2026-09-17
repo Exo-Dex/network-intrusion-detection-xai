@@ -20,7 +20,8 @@ def build_host_temporal_sequences(
 ):
     """
     Construct sequential flow windows grouped by target host or chronological order.
-    
+    Guarantees 1-to-1 alignment with the input DataFrame rows so that len(X_seq) == len(df).
+
     Parameters:
     -----------
     df : pd.DataFrame
@@ -43,53 +44,51 @@ def build_host_temporal_sequences(
     Returns:
     --------
     X_seq : np.ndarray
-        Array of shape (num_sequences, window_size, len(feature_cols)).
+        Array of shape (len(df), window_size, len(feature_cols)).
     y_seq : np.ndarray
-        Array of targets corresponding to each sequence window.
+        Array of targets corresponding to each sequence window (len(df),).
     """
-    df_sorted = df.copy()
-    
-    # Sort chronologically if timestamp is present
-    if time_col and time_col in df_sorted.columns:
-        df_sorted[time_col] = pd.to_datetime(df_sorted[time_col], errors='coerce')
-        df_sorted.sort_values(by=time_col, inplace=True)
-    
-    sequences = []
-    targets = []
-    
-    # Group by destination host if specified, otherwise slide globally
-    if host_col and host_col in df_sorted.columns:
-        groups = [group for _, group in df_sorted.groupby(host_col, sort=False)]
+    N = len(df)
+    F = len(feature_cols)
+    if N == 0:
+        return np.empty((0, window_size, F), dtype=np.float32), np.empty((0,), dtype=np.int64)
+
+    feat_mat = df[feature_cols].to_numpy(dtype=np.float32)
+    labels = df[target_col].to_numpy() if target_col in df.columns else np.zeros(N, dtype=np.int64)
+
+    X_seq = np.zeros((N, window_size, F), dtype=np.float32)
+    y_seq = np.zeros(N, dtype=labels.dtype)
+
+    if host_col and host_col in df.columns:
+        host_vals = df[host_col].values
+        groups = {}
+        for idx, h in enumerate(host_vals):
+            if h not in groups:
+                groups[h] = []
+            groups[h].append(idx)
+        group_indices = list(groups.values())
     else:
-        groups = [df_sorted]
+        group_indices = [np.arange(N)]
+
+    for indices in group_indices:
+        indices = np.asarray(indices)
+        M = len(indices)
+        grp_feats = feat_mat[indices]
+        grp_labels = labels[indices]
         
-    for grp in groups:
-        features = grp[feature_cols].values
-        labels = grp[target_col].values if target_col in grp.columns else np.zeros(len(grp))
-        num_rows = len(grp)
-        
-        if num_rows < window_size:
-            # Pad short bursts
-            pad_len = window_size - num_rows
-            pad_shape = (pad_len, len(feature_cols))
-            zeros_feat = np.zeros(pad_shape, dtype=np.float32)
-            if padding == 'pre':
-                seq = np.vstack([zeros_feat, features])
+        for k in range(M):
+            orig_idx = indices[k]
+            y_seq[orig_idx] = grp_labels[k]
+            if k < window_size - 1:
+                pad_count = window_size - (k + 1)
+                if padding == 'pre':
+                    X_seq[orig_idx, pad_count:] = grp_feats[:k + 1]
+                else:
+                    X_seq[orig_idx, :k + 1] = grp_feats[:k + 1]
             else:
-                seq = np.vstack([features, zeros_feat])
-            sequences.append(seq)
-            targets.append(labels[-1])
-        else:
-            for start_idx in range(0, num_rows - window_size + 1, step_size):
-                end_idx = start_idx + window_size
-                sequences.append(features[start_idx:end_idx])
-                # Label is typically determined by the terminal event in the sequence window
-                targets.append(labels[end_idx - 1])
-                
-    if len(sequences) == 0:
-        return np.empty((0, window_size, len(feature_cols)), dtype=np.float32), np.empty((0,), dtype=np.int64)
-        
-    return np.array(sequences, dtype=np.float32), np.array(targets)
+                X_seq[orig_idx] = grp_feats[k - window_size + 1 : k + 1]
+
+    return X_seq, y_seq
 
 
 def create_latent_sequence_dataset(latent_vectors, targets, window_size=10, step_size=1):

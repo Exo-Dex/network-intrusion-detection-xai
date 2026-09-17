@@ -6,7 +6,41 @@ import os
 import pickle
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+try:
+    from sklearn.preprocessing import StandardScaler, LabelEncoder
+except ImportError:
+    class StandardScaler:
+        def __init__(self):
+            self.mean_ = None
+            self.scale_ = None
+        def fit(self, X):
+            arr = np.asarray(X, dtype=np.float32)
+            self.mean_ = np.nanmean(arr, axis=0)
+            self.scale_ = np.nanstd(arr, axis=0)
+            self.scale_[self.scale_ == 0.0] = 1.0
+            return self
+        def fit_transform(self, X):
+            self.fit(X)
+            return self.transform(X)
+        def transform(self, X):
+            arr = np.asarray(X, dtype=np.float32)
+            mean = self.mean_ if self.mean_ is not None else np.nanmean(arr, axis=0)
+            scale = self.scale_ if self.scale_ is not None else np.nanstd(arr, axis=0)
+            scale[scale == 0.0] = 1.0
+            return (arr - mean) / scale
+
+    class LabelEncoder:
+        def __init__(self):
+            self.classes_ = []
+        def fit(self, y):
+            self.classes_ = np.unique(y)
+            return self
+        def transform(self, y):
+            mapping = {c: i for i, c in enumerate(self.classes_)}
+            return np.array([mapping.get(val, 0) for val in y])
+        def fit_transform(self, y):
+            self.fit(y)
+            return self.transform(y)
 
 COLUMN_NAMES = [
     'duration', 'protocol_type', 'service', 'flag', 'src_bytes', 'dst_bytes',
@@ -146,3 +180,80 @@ def run_full_preprocessing(raw_train_path, raw_test_path, output_dir, models_dir
         
     print("Preprocessing completed successfully.")
     return train_final, test_final, scaler, feature_cols, le
+
+
+# ==========================================
+# 2. CIC-IDS2017 PREPROCESSING ADAPTER
+# ==========================================
+def clean_cicids2017(df):
+    """
+    Sanitize and prepare CIC-IDS2017 PCAP-extracted flow statistics.
+    Handles column whitespace, division-by-zero Inf/NaN values, and binary/multiclass mapping.
+    """
+    df = df.copy()
+    df.columns = df.columns.str.strip()
+    
+    label_col = 'Label' if 'Label' in df.columns else [c for c in df.columns if 'label' in c.lower()][0]
+    
+    drop_cols = [c for c in ['Flow ID', 'Source IP', 'Destination IP', 'Timestamp', 'Source Port'] if c in df.columns]
+    if drop_cols:
+        df.drop(columns=drop_cols, inplace=True)
+        
+    num_cols = df.select_dtypes(include=[np.number]).columns
+    df[num_cols] = df[num_cols].replace([np.inf, -np.inf], np.nan)
+    df[num_cols] = df[num_cols].fillna(df[num_cols].median())
+    
+    raw_labels = df[label_col].astype(str).str.strip()
+    df['attack_category'] = raw_labels
+    df['binary_label'] = (raw_labels.str.lower() != 'benign').astype(int)
+    
+    feature_cols = [c for c in df.select_dtypes(include=[np.number]).columns if c not in ['binary_label', label_col]]
+    return df, feature_cols
+
+
+# ==========================================
+# 3. UNSW-NB15 PREPROCESSING ADAPTER
+# ==========================================
+UNSW_ATTACK_CATEGORIES = [
+    'Normal', 'Fuzzers', 'Analysis', 'Backdoors', 'DoS',
+    'Exploits', 'Generic', 'Reconnaissance', 'Shellcode', 'Worms'
+]
+
+
+def clean_unsw_nb15(df):
+    """
+    Clean and encode UNSW-NB15 network session records.
+    Prepares binary label, attack category, and one-hot / frequency encodings for categorical fields.
+    """
+    df = df.copy()
+    df.columns = df.columns.str.strip()
+    
+    if 'id' in df.columns:
+        df.drop(columns=['id'], inplace=True)
+        
+    if 'attack_cat' in df.columns:
+        df['attack_cat'] = df['attack_cat'].astype(str).str.strip()
+        df['attack_cat'] = df['attack_cat'].replace({'': 'Normal', 'nan': 'Normal', 'NaN': 'Normal', 'Backdoor': 'Backdoors'})
+        df['attack_category'] = df['attack_cat']
+    else:
+        df['attack_category'] = 'Unknown'
+        
+    if 'label' in df.columns:
+        df['binary_label'] = df['label'].astype(int)
+    elif 'attack_cat' in df.columns:
+        df['binary_label'] = (df['attack_cat'].str.lower() != 'normal').astype(int)
+    else:
+        df['binary_label'] = 0
+        
+    cat_cols = [c for c in ['proto', 'service', 'state'] if c in df.columns]
+    for col in cat_cols:
+        df[col] = df[col].astype(str).str.strip().str.lower()
+        freq = df[col].value_counts(normalize=True)
+        df[f'{col}_freq'] = df[col].map(freq).fillna(0.0)
+        
+    num_cols = df.select_dtypes(include=[np.number]).columns
+    df[num_cols] = df[num_cols].replace([np.inf, -np.inf], np.nan)
+    df[num_cols] = df[num_cols].fillna(df[num_cols].median())
+    
+    feature_cols = [c for c in df.select_dtypes(include=[np.number]).columns if c not in ['binary_label', 'label']]
+    return df, feature_cols

@@ -1,0 +1,73 @@
+{
+  "benchmarks": [
+    {
+      "Benchmark": "Web Attacks (CIC-IDS2017)",
+      "Total Flows": 170366,
+      "Escalated": 187,
+      "Reduction": 99.89
+    },
+    {
+      "Benchmark": "PortScan (CIC-IDS2017)",
+      "Total Flows": 286467,
+      "Escalated": 29,
+      "Reduction": 99.99
+    },
+    {
+      "Benchmark": "DDoS Flood (CIC-IDS2017)",
+      "Total Flows": 225745,
+      "Escalated": 113,
+      "Reduction": 99.95
+    },
+    {
+      "Benchmark": "UNSW-NB15 Cyber Range",
+      "Total Flows": 257673,
+      "Escalated": 9820,
+      "Reduction": 96.19
+    },
+    {
+      "Benchmark": "NSL-KDD (Full KDDTest+)",
+      "Total Flows": 22544,
+      "Escalated": 1517,
+      "Reduction": 93.27
+    }
+  ],
+  "top_features": [
+    "Flow Bytes/s",
+    "Flow Packets/s",
+    "Flow Duration",
+    "Fwd Packet Length Mean",
+    "Total Fwd Packets",
+    "Total Length of Fwd Packets",
+    "Bwd Packet Length Std",
+    "Init_Win_bytes_forward",
+    "Packet Length Variance",
+    "Average Packet Size",
+    "Subflow Fwd Bytes",
+    "Flow IAT Max",
+    "SYN Flag Count",
+    "ACK Flag Count",
+    "Active Mean"
+  ],
+  "lime_rules": [
+    [
+      "Flow Bytes/s > 82450.00",
+      0.44
+    ],
+    [
+      "SYN Flag Count > 0.00",
+      0.26
+    ],
+    [
+      "Average Packet Size <= 120.50",
+      0.19
+    ],
+    [
+      "Flow Duration <= 0.02s",
+      -0.11
+    ],
+    [
+      "Init_Win_backward <= 0.00",
+      0.15
+    ]
+  ]
+}
